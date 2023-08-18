@@ -50,6 +50,8 @@ interface SvgInfo {
   svg: string;
   svgHeightPx: number;
   svgWidthPx: number;
+  originalViewBoxWidth: number;
+  originalViewBoxHeight: number;
 }
 
 /**
@@ -248,7 +250,7 @@ export default class VscodeHatRenderer {
             ];
           }
 
-          const { svg, svgWidthPx, svgHeightPx } = svgInfo;
+          const { svgWidthPx, svgHeightPx } = svgInfo;
 
           const { light, dark } = getHatThemeColors(color);
 
@@ -258,12 +260,18 @@ export default class VscodeHatRenderer {
               rangeBehavior: vscode.DecorationRangeBehavior.ClosedClosed,
               light: {
                 before: {
-                  contentIconPath: this.constructColoredSvgDataUri(svg, light),
+                  contentIconPath: this.constructColoredSvgDataUri(
+                    svgInfo,
+                    light,
+                  ),
                 },
               },
               dark: {
                 before: {
-                  contentIconPath: this.constructColoredSvgDataUri(svg, dark),
+                  contentIconPath: this.constructColoredSvgDataUri(
+                    svgInfo,
+                    dark,
+                  ),
                 },
               },
               before: {
@@ -307,10 +315,25 @@ export default class VscodeHatRenderer {
     return isOk;
   }
 
-  private constructColoredSvgDataUri(originalSvg: string, color: string) {
+  private constructColoredSvgDataUri(svgInfo: SvgInfo, color: string) {
+    const { svg: originalSvg, svgWidthPx, originalViewBoxWidth } = svgInfo;
+    let replacementEquals, replacementColon: string;
+    // If color contains a dash, the second part is a stroke.
+    // If you are code spelunking and have found this undocumented (and thus potentially transient) feature,
+    // please subscribe to https://github.com/cursorless-dev/cursorless/pull/1810
+    // so that you can be notified if/when it changes or is removed.
+    if (color.includes("-")) {
+      const [fill, stroke] = color.split("-");
+      const strokeWidth = (0.7 * originalViewBoxWidth) / svgWidthPx;
+      replacementEquals = `fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}"`;
+      replacementColon = `fill: ${fill}; stroke: ${stroke} stroke-width: ${strokeWidth};`;
+    } else {
+      replacementEquals = `fill="${color}"`;
+      replacementColon = `fill:${color};`;
+    }
     const svg = originalSvg
-      .replace(/fill="(?!none)[^"]+"/g, `fill="${color}"`)
-      .replace(/fill:(?!none)[^;]+;/g, `fill:${color};`)
+      .replace(/fill="(?!none)[^"]+"/g, replacementEquals)
+      .replace(/fill:(?!none)[^;]+;/g, replacementColon)
       .replace(/\r?\n/g, " ");
 
     const encoded = encodeURIComponent(svg);
@@ -398,6 +421,8 @@ export default class VscodeHatRenderer {
       svg,
       svgHeightPx,
       svgWidthPx,
+      originalViewBoxHeight,
+      originalViewBoxWidth,
     };
   }
 
