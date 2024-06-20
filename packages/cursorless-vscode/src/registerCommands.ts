@@ -6,10 +6,12 @@ import {
 } from "@cursorless/common";
 import {
   CommandApi,
+  StoredTargetMap,
   TestCaseRecorder,
   analyzeCommandHistory,
   showCheatsheet,
   updateDefaults,
+  type ScopeTestRecorder,
 } from "@cursorless/cursorless-engine";
 import * as vscode from "vscode";
 import { ScopeVisualizer } from "./ScopeVisualizerCommandApi";
@@ -25,23 +27,33 @@ export function registerCommands(
   commandApi: CommandApi,
   fileSystem: FileSystem,
   testCaseRecorder: TestCaseRecorder,
+  scopeTestRecorder: ScopeTestRecorder,
   scopeVisualizer: ScopeVisualizer,
   keyboardCommands: KeyboardCommands,
   hats: VscodeHats,
+  storedTargets: StoredTargetMap,
 ): void {
+  const runCommandWrapper = async (run: () => Promise<unknown>) => {
+    try {
+      return await run();
+    } catch (e) {
+      if (!isTesting()) {
+        const err = e as Error;
+        console.error(err.stack);
+        vscodeIde.handleCommandError(err);
+      }
+      throw e;
+    }
+  };
+
   const commands: Record<CursorlessCommandId, (...args: any[]) => any> = {
     // The core Cursorless command
     [CURSORLESS_COMMAND_ID]: async (...args: unknown[]) => {
-      try {
-        return await commandApi.runCommandSafe(...args);
-      } catch (e) {
-        if (!isTesting()) {
-          const err = e as Error;
-          console.error(err.stack);
-          vscodeIde.handleCommandError(err);
-        }
-        throw e;
-      }
+      return runCommandWrapper(() => commandApi.runCommandSafe(...args));
+    },
+
+    ["cursorless.repeatPreviousCommand"]: async () => {
+      return runCommandWrapper(() => commandApi.repeatPreviousCommand());
     },
 
     // Cheatsheet commands
@@ -55,6 +67,12 @@ export function registerCommands(
     ["cursorless.pauseRecording"]: testCaseRecorder.pause,
     ["cursorless.resumeRecording"]: testCaseRecorder.resume,
     ["cursorless.takeSnapshot"]: testCaseRecorder.takeSnapshot,
+
+    // Scope test recorder commands
+    ["cursorless.recordScopeTests.showUnimplementedFacets"]:
+      scopeTestRecorder.showUnimplementedFacets,
+    ["cursorless.recordScopeTests.saveActiveDocument"]:
+      scopeTestRecorder.saveActiveDocument,
 
     // Other commands
     ["cursorless.showQuickPick"]: showQuickPick,
@@ -98,6 +116,9 @@ export function registerCommands(
     ["cursorless.keyboard.modal.modeOn"]: keyboardCommands.modal.modeOn,
     ["cursorless.keyboard.modal.modeOff"]: keyboardCommands.modal.modeOff,
     ["cursorless.keyboard.modal.modeToggle"]: keyboardCommands.modal.modeToggle,
+
+    ["cursorless.keyboard.undoTarget"]: () => storedTargets.undo("keyboard"),
+    ["cursorless.keyboard.redoTarget"]: () => storedTargets.redo("keyboard"),
   };
 
   extensionContext.subscriptions.push(

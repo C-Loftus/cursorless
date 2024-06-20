@@ -4,10 +4,9 @@ import {
   FileSystem,
   Hats,
   IDE,
+  ensureCommandShape,
   ScopeProvider,
 } from "@cursorless/common";
-import { StoredTargetMap } from "./core/StoredTargets";
-import { TreeSitter } from "./typings/TreeSitter";
 import {
   CommandRunnerDecorator,
   CursorlessEngine,
@@ -15,10 +14,11 @@ import {
 import { Debug } from "./core/Debug";
 import { HatTokenMapImpl } from "./core/HatTokenMapImpl";
 import { Snippets } from "./core/Snippets";
-import { ensureCommandShape } from "./core/commandVersionUpgrades/ensureCommandShape";
+import { StoredTargetMap } from "./core/StoredTargets";
 import { RangeUpdater } from "./core/updateSelections/RangeUpdater";
 import { CustomSpokenFormGeneratorImpl } from "./generateSpokenForm/CustomSpokenFormGeneratorImpl";
 import { LanguageDefinitions } from "./languages/LanguageDefinitions";
+import { TalonSpokenFormsJsonReader } from "./nodeCommon/TalonSpokenFormsJsonReader";
 import { ModifierStageFactoryImpl } from "./processTargets/ModifierStageFactoryImpl";
 import { ScopeHandlerFactoryImpl } from "./processTargets/modifiers/scopeHandlers";
 import { runCommand } from "./runCommand";
@@ -28,16 +28,17 @@ import { ScopeRangeProvider } from "./scopeProviders/ScopeRangeProvider";
 import { ScopeRangeWatcher } from "./scopeProviders/ScopeRangeWatcher";
 import { ScopeSupportChecker } from "./scopeProviders/ScopeSupportChecker";
 import { ScopeSupportWatcher } from "./scopeProviders/ScopeSupportWatcher";
-import { TalonSpokenFormsJsonReader } from "./nodeCommon/TalonSpokenFormsJsonReader";
 import { injectIde } from "./singletons/ide.singleton";
+import { TreeSitter } from "./typings/TreeSitter";
+import { KeyboardTargetUpdater } from "./KeyboardTargetUpdater";
 
-export function createCursorlessEngine(
+export async function createCursorlessEngine(
   treeSitter: TreeSitter,
   ide: IDE,
   hats: Hats,
   commandServerApi: CommandServerApi | null,
   fileSystem: FileSystem,
-): CursorlessEngine {
+): Promise<CursorlessEngine> {
   injectIde(ide);
 
   const debug = new Debug(treeSitter);
@@ -57,7 +58,10 @@ export function createCursorlessEngine(
 
   const storedTargets = new StoredTargetMap();
 
+  const keyboardTargetUpdater = new KeyboardTargetUpdater(storedTargets);
+
   const languageDefinitions = new LanguageDefinitions(fileSystem, treeSitter);
+  await languageDefinitions.init();
 
   const talonSpokenForms = new TalonSpokenFormsJsonReader(fileSystem);
 
@@ -65,38 +69,50 @@ export function createCursorlessEngine(
     talonSpokenForms,
   );
 
-  ide.disposeOnExit(rangeUpdater, languageDefinitions, hatTokenMap, debug);
+  ide.disposeOnExit(
+    rangeUpdater,
+    languageDefinitions,
+    hatTokenMap,
+    debug,
+    keyboardTargetUpdater,
+  );
 
   const commandRunnerDecorators: CommandRunnerDecorator[] = [];
+
+  let previousCommand: Command | undefined = undefined;
+
+  const runCommandClosure = (command: Command) => {
+    previousCommand = command;
+    return runCommand(
+      treeSitter,
+      commandServerApi,
+      debug,
+      hatTokenMap,
+      snippets,
+      storedTargets,
+      languageDefinitions,
+      rangeUpdater,
+      commandRunnerDecorators,
+      command,
+    );
+  };
 
   return {
     commandApi: {
       runCommand(command: Command) {
-        return runCommand(
-          treeSitter,
-          debug,
-          hatTokenMap,
-          snippets,
-          storedTargets,
-          languageDefinitions,
-          rangeUpdater,
-          commandRunnerDecorators,
-          command,
-        );
+        return runCommandClosure(command);
       },
 
       runCommandSafe(...args: unknown[]) {
-        return runCommand(
-          treeSitter,
-          debug,
-          hatTokenMap,
-          snippets,
-          storedTargets,
-          languageDefinitions,
-          rangeUpdater,
-          commandRunnerDecorators,
-          ensureCommandShape(args),
-        );
+        return runCommandClosure(ensureCommandShape(args));
+      },
+
+      repeatPreviousCommand() {
+        if (previousCommand == null) {
+          throw new Error("No previous command");
+        }
+
+        return runCommandClosure(previousCommand);
       },
     },
     scopeProvider: createScopeProvider(
