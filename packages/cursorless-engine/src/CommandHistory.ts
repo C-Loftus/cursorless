@@ -153,6 +153,7 @@ function sanitizeActionInPlace(action: ActionDescriptor): void {
     case "findInWorkspace":
     case "foldRegion":
     case "followLink":
+    case "followLinkAside":
     case "increment":
     case "indentLine":
     case "insertCopyAfter":
@@ -197,6 +198,7 @@ function sanitizeActionInPlace(action: ActionDescriptor): void {
     case "wrapWithPairedDelimiter":
     case "findInDocument":
     case "private.setKeyboardTarget":
+    case "parsed":
       break;
 
     default: {

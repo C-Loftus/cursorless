@@ -25,6 +25,7 @@ export const actions = {
   insertEmptyLineAfter: "float",
   foldRegion: "fold",
   followLink: "follow",
+  followLinkAside: "follow split",
   deselect: "give",
   highlight: "highlight",
   showHover: "hover",
@@ -66,6 +67,7 @@ export const actions = {
   executeCommand: null,
   getText: null,
   replace: null,
+  parsed: null,
   ["private.getTargets"]: null,
   ["private.setKeyboardTarget"]: null,
 

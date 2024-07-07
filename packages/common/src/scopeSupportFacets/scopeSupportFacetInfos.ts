@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/naming-convention */
-
 import {
   ScopeSupportFacet,
   ScopeSupportFacetInfo,
@@ -354,6 +352,12 @@ export const scopeSupportFacetInfos: Record<
   "condition.switchCase": {
     description: "A condition in a switch statement",
     scopeType: "condition",
+  },
+  "condition.switchCase.iteration": {
+    description:
+      "The iteration scope for conditions in a switch statement: should contain all the cases, and exclude any curly brackets delimiting the full switch statement body",
+    scopeType: "condition",
+    isIteration: true,
   },
 
   "name.assignment": {
